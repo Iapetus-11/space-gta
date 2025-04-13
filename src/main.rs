@@ -1,36 +1,57 @@
 use bevy::{color::palettes::tailwind, prelude::*};
-
-mod physics;
+use bevy_rapier2d::prelude::*;
 
 #[derive(Component)]
 struct PlayerMarker;
 
+#[derive(Component)]
+struct MaximumVelocity {
+    linear: Vec2,
+    angular: f32,
+}
+
 #[derive(Bundle)]
 struct PlayerVehicleBundle {
     marker: PlayerMarker,
-    velocity: physics::Velocity,
-    velocity_maximum: physics::VelocityMaximum,
-    acceleration: physics::Acceleration,
-    drag: physics::Drag,
+
     transform: Transform,
-    mesh: Mesh2d,
-    mesh_material: MeshMaterial2d<ColorMaterial>,
+    rigid_body: RigidBody,
+    velocity: Velocity,
+    max_velocity: MaximumVelocity,
+    acceleration: ExternalForce,
+    gravity: GravityScale,
+    mass: AdditionalMassProperties,
+    continuous_collision_detection: Ccd,
+    restitution: Restitution,
+    damping: Damping,
+    locked_axes: LockedAxes,
 }
 
 impl PlayerVehicleBundle {
-    fn new(mesh: Mesh2d, mesh_material: MeshMaterial2d<ColorMaterial>) -> Self {
+    fn new() -> Self {
         Self {
             marker: PlayerMarker,
-            velocity: physics::Velocity(Vec2::ZERO),
-            velocity_maximum: physics::VelocityMaximum(Vec2::new(700.0, 700.0)),
-            acceleration: physics::Acceleration(Vec2::ZERO),
-            drag: physics::Drag {
-                recommend: 1.0,
-                actual: 0.0,
-            },
+
             transform: default(),
-            mesh,
-            mesh_material,
+            rigid_body: RigidBody::Dynamic,
+            velocity: Velocity::zero(),
+            max_velocity: MaximumVelocity {
+                linear: Vec2::new(1000.0, 1000.0),
+                angular: 0.0,
+            },
+            acceleration: default(),
+            gravity: GravityScale(0.0),
+            mass: AdditionalMassProperties::Mass(100.0),
+            continuous_collision_detection: Ccd::enabled(),
+            restitution: Restitution {
+                coefficient: 0.4,
+                combine_rule: CoefficientCombineRule::Average,
+            },
+            damping: Damping {
+                linear_damping: 0.0,
+                angular_damping: 0.0,
+            },
+            locked_axes: LockedAxes::ROTATION_LOCKED,
         }
     }
 }
@@ -41,24 +62,40 @@ struct ChaserMarker;
 #[derive(Bundle)]
 struct ChaserVehicleBundle {
     marker: ChaserMarker,
-    velocity: physics::Velocity,
-    velocity_maximum: physics::VelocityMaximum,
-    acceleration: physics::Acceleration,
+
     transform: Transform,
-    mesh: Mesh2d,
-    mesh_material: MeshMaterial2d<ColorMaterial>,
+    rigid_body: RigidBody,
+    velocity: Velocity,
+    max_velocity: MaximumVelocity,
+    acceleration: ExternalForce,
+    gravity: GravityScale,
+    mass: AdditionalMassProperties,
+    continuous_collision_detection: Ccd,
+    restitution: Restitution,
+    locked_axes: LockedAxes,
 }
 
 impl ChaserVehicleBundle {
-    fn new(mesh: Mesh2d, mesh_material: MeshMaterial2d<ColorMaterial>) -> Self {
+    fn new() -> Self {
         Self {
             marker: ChaserMarker,
-            velocity: physics::Velocity(Vec2::ZERO),
-            velocity_maximum: physics::VelocityMaximum(Vec2::new(680.0, 680.0)),
-            acceleration: physics::Acceleration(Vec2::ZERO),
+
             transform: default(),
-            mesh,
-            mesh_material,
+            rigid_body: RigidBody::Dynamic,
+            velocity: Velocity::zero(),
+            max_velocity: MaximumVelocity {
+                linear: Vec2::new(900.0, 900.0),
+                angular: 0.0,
+            },
+            acceleration: default(),
+            gravity: GravityScale(0.0),
+            mass: AdditionalMassProperties::Mass(100.0),
+            continuous_collision_detection: Ccd::enabled(),
+            restitution: Restitution {
+                coefficient: 0.7,
+                combine_rule: CoefficientCombineRule::Average,
+            },
+            locked_axes: LockedAxes::ROTATION_LOCKED,
         }
     }
 
@@ -74,154 +111,178 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands.spawn((
-        PlayerVehicleBundle::new(
-            Mesh2d(meshes.add(Circle::new(25.0))),
-            MeshMaterial2d(materials.add(Color::from(tailwind::TEAL_500))),
-        ),
+        PlayerVehicleBundle::new(),
         Camera2d,
         Projection::from(OrthographicProjection {
-            scale: 1.0,
+            scale: 2.0,
             ..OrthographicProjection::default_2d()
         }),
+        Mesh2d(meshes.add(Circle::new(25.0))),
+        MeshMaterial2d(materials.add(Color::from(tailwind::TEAL_500))),
+        Collider::ball(25.0),
     ));
 
-    commands.spawn((ChaserVehicleBundle::new(
+    commands.spawn((
+        ChaserVehicleBundle::new()
+            .with_transform(Transform::from_translation(Vec3::new(-10.0, 40.0, 0.0))),
         Mesh2d(meshes.add(Circle::new(25.0))),
         MeshMaterial2d(materials.add(Color::from(tailwind::RED_500))),
-    ),));
-    commands.spawn((ChaserVehicleBundle::new(
+        Collider::ball(25.0),
+    ));
+    commands.spawn((
+        ChaserVehicleBundle::new()
+            .with_transform(Transform::from_translation(Vec3::new(-100.0, 70.0, 0.0))),
         Mesh2d(meshes.add(Circle::new(25.0))),
         MeshMaterial2d(materials.add(Color::from(tailwind::RED_600))),
-    )
-    .with_transform(Transform::default().with_translation(Vec3::new(100.0, 0.0, 0.0))),));
-    commands.spawn((ChaserVehicleBundle::new(
+        Collider::ball(25.0),
+    ));
+    commands.spawn((
+        ChaserVehicleBundle::new()
+            .with_transform(Transform::from_translation(Vec3::new(100.0, 20.0, 0.0))),
         Mesh2d(meshes.add(Circle::new(25.0))),
         MeshMaterial2d(materials.add(Color::from(tailwind::RED_700))),
-    )
-    .with_transform(Transform::default().with_translation(Vec3::new(0.0, 100.0, 0.0))),));
+        Collider::ball(25.0),
+    ));
 
     for idx in 0..100 {
         commands.spawn((
             Mesh2d(meshes.add(Rectangle::new(40.0, 20.0))),
             MeshMaterial2d(materials.add(Color::from(tailwind::PURPLE_800))),
-            Transform::default().with_translation(Vec3::new(100.0 * idx as f32, 0.0, 0.0)),
+            Transform::default().with_translation(Vec3::new(100.0 * idx as f32, 400.0, 0.0)),
+            Collider::cuboid(20.0, 10.0),
+            RigidBody::Fixed,
         ));
     }
 }
 
 fn player_input(
     kb: Res<ButtonInput<KeyCode>>,
-    player_vehicle_velocity_and_drag: Single<
-        (
-            &physics::Velocity,
-            &mut physics::Acceleration,
-            &mut physics::Drag,
-        ),
+    player_vehicle_dynamics: Single<
+        (&Velocity, &mut ExternalForce, &mut Damping),
         With<PlayerMarker>,
     >,
 ) {
-    const SENSITIVITY: f32 = 1000.0;
-    const SENSITIVITY_REVERSE_BOOST: f32 = 2.0;
+    const SENSITIVITY: f32 = 1000000.0;
+    const SENSITIVITY_REVERSE_BOOST: f32 = 3.0;
 
-    let (player_vehicle_vel, mut acceleration, mut player_vehicle_drag) =
-        player_vehicle_velocity_and_drag.into_inner();
+    let (player_vehicle_vel, mut acceleration, mut damping) = player_vehicle_dynamics.into_inner();
 
-    **acceleration = Vec2::ZERO;
-    player_vehicle_drag.actual = player_vehicle_drag.recommend;
+    acceleration.force = Vec2::ZERO;
+    damping.linear_damping = 1.0;
 
     if kb.any_pressed([KeyCode::ArrowUp, KeyCode::KeyW]) {
-        let sensitivity_modifier = match player_vehicle_vel.y {
+        let sensitivity_modifier = match player_vehicle_vel.linvel.y {
             ..-50.0 => SENSITIVITY_REVERSE_BOOST,
             _ => 1.0,
         };
-        acceleration.y = SENSITIVITY * sensitivity_modifier;
-        player_vehicle_drag.actual = 0.0;
+        acceleration.force.y = SENSITIVITY * sensitivity_modifier;
+        damping.linear_damping = 0.0;
     }
 
     if kb.any_pressed([KeyCode::ArrowRight, KeyCode::KeyD]) {
-        let sensitivity_modifier = match player_vehicle_vel.x {
+        let sensitivity_modifier = match player_vehicle_vel.linvel.x {
             ..-50.0 => SENSITIVITY_REVERSE_BOOST,
             _ => 1.0,
         };
-        acceleration.x = SENSITIVITY * sensitivity_modifier;
-        player_vehicle_drag.actual = 0.0;
+        acceleration.force.x = SENSITIVITY * sensitivity_modifier;
+        damping.linear_damping = 0.0;
     }
 
     if kb.any_pressed([KeyCode::ArrowDown, KeyCode::KeyS]) {
-        let sensitivity_modifier = match player_vehicle_vel.y {
+        let sensitivity_modifier = match player_vehicle_vel.linvel.y {
             -50.0.. => SENSITIVITY_REVERSE_BOOST,
             _ => 1.0,
         };
-        acceleration.y = -SENSITIVITY * sensitivity_modifier;
-        player_vehicle_drag.actual = 0.0;
+        acceleration.force.y = -SENSITIVITY * sensitivity_modifier;
+        damping.linear_damping = 0.0;
     }
 
     if kb.any_pressed([KeyCode::ArrowLeft, KeyCode::KeyA]) {
-        let sensitivity_modifier = match player_vehicle_vel.x {
+        let sensitivity_modifier = match player_vehicle_vel.linvel.x {
             -50.0.. => SENSITIVITY_REVERSE_BOOST,
             _ => 1.0,
         };
-        acceleration.x = -SENSITIVITY * sensitivity_modifier;
-        player_vehicle_drag.actual = 0.0;
-    }
-}
-
-fn update_camera_scale(query: Single<(&physics::Velocity, &physics::VelocityMaximum, &mut Projection), With<PlayerMarker>>) {
-    let (player_vel, player_vel_max, mut cam_projection) = query.into_inner();
-
-    let vel_perc = player_vel.abs() / **player_vel_max;
-
-    if let Projection::Orthographic(cam_projection) = &mut *cam_projection {
-        cam_projection.scale = (vel_perc.x.max(vel_perc.y) * 1.5) + 1.0;
+        acceleration.force.x = -SENSITIVITY * sensitivity_modifier;
+        damping.linear_damping = 0.0;
     }
 }
 
 fn update_chasers(
-    mut chasers: Query<
-        (&physics::Velocity, &Transform, &mut physics::Acceleration),
-        With<ChaserMarker>,
-    >,
+    mut chasers: Query<(&Velocity, &Transform, &mut ExternalForce), With<ChaserMarker>>,
     player_trans: Single<&Transform, With<PlayerMarker>>,
 ) {
-    const MAX_ACCELERATION: Vec2 = Vec2::new(900.0, 900.0);
+    let chasers = chasers.iter_mut().collect::<Vec<_>>();
+    let chaser_translations = chasers
+        .iter()
+        .map(|c| c.1.translation.clone())
+        .collect::<Vec<_>>();
 
-    for (velocity, transform, mut acceleration) in chasers.iter_mut() {
-        let distance_vector = transform.translation - player_trans.translation;
+    for (velocity, transform, mut acceleration) in chasers {
+        let distance_vector = player_trans.translation - transform.translation;
 
         let distance_scalar = transform
             .translation
             .distance(player_trans.translation)
             .abs();
 
-        let target = Vec2::new(
-            650.0 * distance_vector.y.signum(),
-            -650.0 * distance_vector.x.signum(),
-        )
-        .lerp(
-            // Enforce that the chaser isn't getting too close and circles the player
-            Vec2::new(
-                -800.0 * distance_vector.x.signum() * (100.0 / distance_vector.y.max(100.0)),
-                -800.0 * distance_vector.y.signum() * (100.0 / distance_vector.x.max(100.0)),
-            ),
-            (distance_scalar.min(300.0) / 300.0).tanh(),
-        );
+        if distance_scalar > 150.0 {
+            acceleration.force = Vec2::new(
+                800000.0
+                    * distance_vector.x.signum()
+                    * (distance_vector.x.abs() / 400.0)
+                    * (if velocity.linvel.x.signum() != distance_vector.x.signum() {
+                        3.0
+                    } else {
+                        1.0
+                    }),
+                800000.0
+                    * distance_vector.y.signum()
+                    * (distance_vector.y.abs() / 400.0)
+                    * (if velocity.linvel.y.signum() != distance_vector.y.signum() {
+                        3.0
+                    } else {
+                        1.0
+                    }),
+            );
+        } else if distance_scalar < 150.0 {
+            acceleration.force = Vec2::new(
+                -1000000.0 * distance_vector.x.signum(),
+                -1000000.0 * distance_vector.y.signum(),
+            )
+        }
+}
 
-        **acceleration = (target - **velocity).clamp(-MAX_ACCELERATION, MAX_ACCELERATION);
+fn enforce_velocity_maximum(mut query: Query<(&mut Velocity, &MaximumVelocity)>) {
+    for (mut velocity, maximum_velocity) in &mut query {
+        velocity.linvel = velocity
+            .linvel
+            .clamp(-maximum_velocity.linear, maximum_velocity.linear);
+        velocity.angvel = velocity
+            .angvel
+            .clamp(-maximum_velocity.angular, maximum_velocity.angular);
     }
 }
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "SPACE GTA".to_string(),
+                ..default()
+            }),
+            ..default()
+        }))
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_systems(Startup, (setup,))
         .add_systems(
             FixedUpdate,
             (
                 player_input,
-                physics::apply_acceleration,
-                physics::apply_drag,
-                physics::apply_velocity,
-                update_camera_scale,
+                enforce_velocity_maximum,
+                // physics::apply_acceleration,
+                // physics::apply_drag,
+                // physics::apply_velocity,
+                // update_camera_scale,
             ),
         )
         .add_systems(Update, update_chasers)

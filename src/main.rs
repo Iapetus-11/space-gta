@@ -80,7 +80,7 @@ fn setup(
         ),
         Camera2d,
         Projection::from(OrthographicProjection {
-            scale: 2.0,
+            scale: 1.0,
             ..OrthographicProjection::default_2d()
         }),
     ));
@@ -166,6 +166,16 @@ fn player_input(
     }
 }
 
+fn update_camera_scale(query: Single<(&physics::Velocity, &physics::VelocityMaximum, &mut Projection), With<PlayerMarker>>) {
+    let (player_vel, player_vel_max, mut cam_projection) = query.into_inner();
+
+    let vel_perc = player_vel.abs() / **player_vel_max;
+
+    if let Projection::Orthographic(cam_projection) = &mut *cam_projection {
+        cam_projection.scale = (vel_perc.x.max(vel_perc.y) * 1.5) + 1.0;
+    }
+}
+
 fn update_chasers(
     mut chasers: Query<
         (&physics::Velocity, &Transform, &mut physics::Acceleration),
@@ -211,6 +221,7 @@ fn main() {
                 physics::apply_acceleration,
                 physics::apply_drag,
                 physics::apply_velocity,
+                update_camera_scale,
             ),
         )
         .add_systems(Update, update_chasers)

@@ -10,6 +10,12 @@ pub struct VelocityMaximum(pub Vec2);
 pub struct Acceleration(pub Vec2);
 
 #[derive(Component)]
+pub enum Collideable {
+    Radius(f32),
+    Rectangle(Rectangle),
+}
+
+#[derive(Component)]
 pub struct Drag {
     pub recommend: f32,
     pub actual: f32,
@@ -43,3 +49,7 @@ pub fn apply_acceleration(
         }
     }
 }
+
+// pub fn apply_collisions(
+    // mut query: Query<(&Collideable, &mut Velocity, &Transform)>
+// )

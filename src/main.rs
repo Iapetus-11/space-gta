@@ -1,24 +1,10 @@
 use bevy::{color::palettes::tailwind, math::VectorSpace, prelude::*};
 
-#[derive(Component)]
-struct Velocity {
-    max: Vec2,
-    val: Vec2,
-}
+#[derive(Component, Deref, DerefMut)]
+struct Velocity(Vec2);
 
-impl std::ops::Deref for Velocity {
-    type Target = Vec2;
-
-    fn deref(&self) -> &Self::Target {
-        &self.val
-    }
-}
-
-impl std::ops::DerefMut for Velocity {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.val
-    }
-}
+#[derive(Component, Deref, DerefMut)]
+struct VelocityMaximum(Vec2);
 
 #[derive(Component, Deref, DerefMut)]
 struct Acceleration(Vec2);
@@ -36,6 +22,7 @@ struct PlayerMarker;
 struct PlayerVehicleBundle {
     marker: PlayerMarker,
     velocity: Velocity,
+    velocity_maximum: VelocityMaximum,
     acceleration: Acceleration,
     drag: Drag,
     transform: Transform,
@@ -47,9 +34,13 @@ impl PlayerVehicleBundle {
     fn new(mesh: Mesh2d, mesh_material: MeshMaterial2d<ColorMaterial>) -> Self {
         Self {
             marker: PlayerMarker,
-            velocity: Velocity { max: Vec2::new(700.0, 700.0), val: Vec2::ZERO },
+            velocity: Velocity(Vec2::ZERO),
+            velocity_maximum: VelocityMaximum(Vec2::new(700.0, 700.0)),
             acceleration: Acceleration(Vec2::ZERO),
-            drag: Drag { recommend: 1.0, actual: 0.0 },
+            drag: Drag {
+                recommend: 1.0,
+                actual: 0.0,
+            },
             transform: default(),
             mesh,
             mesh_material,
@@ -64,6 +55,7 @@ struct ChaserMarker;
 struct ChaserVehicleBundle {
     marker: ChaserMarker,
     velocity: Velocity,
+    velocity_maximum: VelocityMaximum,
     acceleration: Acceleration,
     transform: Transform,
     mesh: Mesh2d,
@@ -74,12 +66,18 @@ impl ChaserVehicleBundle {
     fn new(mesh: Mesh2d, mesh_material: MeshMaterial2d<ColorMaterial>) -> Self {
         Self {
             marker: ChaserMarker,
-            velocity: Velocity { max: Vec2::new(680.0, 680.0), val: Vec2::ZERO },
+            velocity: Velocity(Vec2::ZERO),
+            velocity_maximum: VelocityMaximum(Vec2::new(680.0, 680.0)),
             acceleration: Acceleration(Vec2::ZERO),
             transform: default(),
             mesh,
             mesh_material,
         }
+    }
+
+    fn with_transform(mut self, transform: Transform) -> Self {
+        self.transform = transform;
+        self
     }
 }
 
@@ -100,10 +98,18 @@ fn setup(
         }),
     ));
 
-    commands.spawn(ChaserVehicleBundle::new(
+    commands.spawn((ChaserVehicleBundle::new(
         Mesh2d(meshes.add(Circle::new(25.0))),
         MeshMaterial2d(materials.add(Color::from(tailwind::RED_500))),
-    ));
+    ),));
+    commands.spawn((ChaserVehicleBundle::new(
+        Mesh2d(meshes.add(Circle::new(25.0))),
+        MeshMaterial2d(materials.add(Color::from(tailwind::RED_600))),
+    ).with_transform(Transform::default().with_translation(Vec3::new(100.0, 0.0, 0.0))),));
+    commands.spawn((ChaserVehicleBundle::new(
+        Mesh2d(meshes.add(Circle::new(25.0))),
+        MeshMaterial2d(materials.add(Color::from(tailwind::RED_700))),
+    ).with_transform(Transform::default().with_translation(Vec3::new(0.0, 100.0, 0.0))),));
 
     for idx in 0..100 {
         commands.spawn((
@@ -114,10 +120,7 @@ fn setup(
     }
 }
 
-fn apply_velocity(
-    mut query: Query<(&mut Transform, &Velocity)>,
-    time: Res<Time>,
-) {
+fn apply_velocity(mut query: Query<(&mut Transform, &Velocity)>, time: Res<Time>) {
     for (mut transform, velocity) in &mut query {
         transform.translation.x += velocity.x * time.delta_secs();
         transform.translation.y += velocity.y * time.delta_secs();
@@ -133,10 +136,16 @@ fn apply_drag(mut query: Query<(&mut Velocity, &Drag)>, time: Res<Time>) {
     }
 }
 
-fn apply_acceleration(mut query: Query<(&mut Velocity, &Acceleration)>, time: Res<Time>) {
-    for (mut velocity, acceleration) in &mut query {
+fn apply_acceleration(
+    mut query: Query<(&mut Velocity, Option<&VelocityMaximum>, &Acceleration)>,
+    time: Res<Time>,
+) {
+    for (mut velocity, velocity_max, acceleration) in &mut query {
         **velocity += **acceleration * time.delta_secs();
-        **velocity = velocity.clamp(-velocity.max, velocity.max)
+
+        if let Some(velocity_max) = velocity_max {
+            **velocity = velocity.clamp(-**velocity_max, **velocity_max);
+        }
     }
 }
 
@@ -200,25 +209,27 @@ fn update_chasers(
     const MAX_ACCELERATION: Vec2 = Vec2::new(900.0, 900.0);
 
     for (velocity, transform, mut acceleration) in chasers.iter_mut() {
-        let distance = transform.translation - player_trans.translation;
-        let target = Vec2::new(-650.0 * distance.x.signum(), -650.0 * distance.y.signum());
+        let distance_vector = transform.translation - player_trans.translation;
+
+        let distance_scalar = transform
+            .translation
+            .distance(player_trans.translation)
+            .abs();
+
+        let target = Vec2::new(
+            650.0 * distance_vector.y.signum(),
+            -650.0 * distance_vector.x.signum(),
+        )
+        .lerp(
+            // Enforce that the chaser isn't getting too close and circles the player
+            Vec2::new(
+                -800.0 * distance_vector.x.signum() * (100.0 / distance_vector.y.max(100.0)),
+                -800.0 * distance_vector.y.signum() * (100.0 / distance_vector.x.max(100.0)),
+            ),
+            (distance_scalar.min(300.0) / 300.0).tanh(),
+        );
 
         **acceleration = (target - **velocity).clamp(-MAX_ACCELERATION, MAX_ACCELERATION);
-
-        // vel.x += (target_x - vel.x).clamp(-9.0, 9.0);
-        // vel.y += (target_y - vel.y).clamp(-9.0, 9.0);
-
-        // if vel.x.abs() < 4.0 {
-        //     vel.x = 0.0;
-        // } else {
-        //     // vel.x /= 1.1;
-        // }
-
-        // if vel.y.abs() < 4.0 {
-        //     vel.y = 0.0;
-        // } else {
-        //     // vel.y /= 1.1;
-        // }
     }
 }
 
@@ -226,7 +237,10 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_systems(Startup, (setup,))
-        .add_systems(FixedUpdate, (player_input, apply_acceleration, apply_drag, apply_velocity))
+        .add_systems(
+            FixedUpdate,
+            (player_input, apply_acceleration, apply_drag, apply_velocity),
+        )
         .add_systems(Update, update_chasers)
         .insert_resource(Time::<Fixed>::from_hz(64.0))
         .run();

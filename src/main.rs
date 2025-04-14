@@ -222,10 +222,6 @@ fn update_chasers(
     player_trans: Single<&Transform, With<PlayerMarker>>,
 ) {
     let chasers = chasers.iter_mut().collect::<Vec<_>>();
-    let chaser_translations = chasers
-        .iter()
-        .map(|c| c.1.translation.clone())
-        .collect::<Vec<_>>();
 
     for (velocity, transform, mut acceleration) in chasers {
         let distance_vector = player_trans.translation - transform.translation;
@@ -235,6 +231,7 @@ fn update_chasers(
             .distance(player_trans.translation)
             .abs();
 
+        // Make chasers chase the player
         let chase_force = Vec2::new(
                 800000.0
                     * distance_vector.x.signum()
@@ -252,6 +249,7 @@ fn update_chasers(
                     }),
             );
 
+        // Make chasers circle the player
         let surround_force = Vec2::new(
             900000.0 * distance_vector.x.signum(),
             900000.0 * distance_vector.y.signum(),
@@ -288,10 +286,6 @@ fn main() {
             (
                 player_input,
                 enforce_velocity_maximum,
-                // physics::apply_acceleration,
-                // physics::apply_drag,
-                // physics::apply_velocity,
-                // update_camera_scale,
             ),
         )
         .add_systems(Update, update_chasers)

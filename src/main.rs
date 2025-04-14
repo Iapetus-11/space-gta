@@ -270,7 +270,7 @@ fn update_chasers(
         acceleration.force = Vec2::lerp(
             surround_force,
             chase_force,
-            (distance_scalar.min(400.0) / 400.0).tanh(),
+            distance_scalar.min(400.0) / 400.0,
         )
     }
 }

@@ -49,7 +49,7 @@ impl PlayerVehicleBundle {
                 combine_rule: CoefficientCombineRule::Average,
             },
             friction: Friction {
-                coefficient: 0.1,
+                coefficient: 0.01,
                 combine_rule: CoefficientCombineRule::Average,
             },
             damping: Damping {
@@ -102,7 +102,7 @@ impl ChaserVehicleBundle {
                 combine_rule: CoefficientCombineRule::Average,
             },
             friction: Friction {
-                coefficient: 0.1,
+                coefficient: 0.01,
                 combine_rule: CoefficientCombineRule::Average,
             },
             locked_axes: LockedAxes::ROTATION_LOCKED,
@@ -156,13 +156,21 @@ fn setup(
 
     for idx in 0..100 {
         commands.spawn((
-            Mesh2d(meshes.add(Rectangle::new(40.0, 20.0))),
+            Mesh2d(meshes.add(Rectangle::new(50.0, 10.0))),
             MeshMaterial2d(materials.add(Color::from(tailwind::PURPLE_800))),
-            Transform::default().with_translation(Vec3::new(100.0 * idx as f32, 400.0, 0.0)),
-            Collider::cuboid(20.0, 10.0),
-            RigidBody::Fixed,
+            Transform::default().with_translation(Vec3::new(132.0 * idx as f32, 400.0, 0.0)),
+            // Collider::cuboid(20.0, 10.0),
+            // RigidBody::Fixed,
         ));
     }
+
+    commands.spawn((
+        Mesh2d(meshes.add(Rectangle::new(200.0, 200.0))),
+        MeshMaterial2d(materials.add(Color::from(tailwind::PURPLE_800))),
+        Collider::cuboid(100.0, 100.0),
+        RigidBody::Dynamic,
+        GravityScale(0.0),
+    ));
 }
 
 fn player_input(
@@ -233,29 +241,37 @@ fn update_chasers(
 
         // Make chasers chase the player
         let chase_force = Vec2::new(
-                800000.0
-                    * distance_vector.x.signum()
-                    * (if velocity.linvel.x.signum() != distance_vector.x.signum() {
-                        3.0
-                    } else {
-                        1.0
-                    }),
-                800000.0
-                    * distance_vector.y.signum()
-                    * (if velocity.linvel.y.signum() != distance_vector.y.signum() {
-                        3.0
-                    } else {
-                        1.0
-                    }),
-            );
+            800000.0
+                * distance_vector.x.signum()
+                * (if velocity.linvel.x.signum() != distance_vector.x.signum() {
+                    3.0
+                } else {
+                    1.0
+                }),
+            800000.0
+                * distance_vector.y.signum()
+                * (if velocity.linvel.y.signum() != distance_vector.y.signum() {
+                    3.0
+                } else {
+                    1.0
+                }),
+        );
 
         // Make chasers circle the player
         let surround_force = Vec2::new(
             900000.0 * distance_vector.x.signum(),
             900000.0 * distance_vector.y.signum(),
-        ).rotate(Vec2::new(-1.5708*1.5, 1.5708));
+        )
+        .rotate(Vec2::new(
+            std::f32::consts::FRAC_PI_2 * -1.5,
+            std::f32::consts::FRAC_PI_2,
+        ));
 
-        acceleration.force = Vec2::lerp(surround_force, chase_force, (distance_scalar.min(400.0) / 400.0).tanh())
+        acceleration.force = Vec2::lerp(
+            surround_force,
+            chase_force,
+            (distance_scalar.min(400.0) / 400.0).tanh(),
+        )
     }
 }
 
@@ -281,13 +297,7 @@ fn main() {
         }))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_systems(Startup, (setup,))
-        .add_systems(
-            FixedUpdate,
-            (
-                player_input,
-                enforce_velocity_maximum,
-            ),
-        )
+        .add_systems(FixedUpdate, (player_input, enforce_velocity_maximum))
         .add_systems(Update, update_chasers)
         .insert_resource(Time::<Fixed>::from_hz(64.0))
         .run();

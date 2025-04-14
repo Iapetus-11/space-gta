@@ -1,4 +1,4 @@
-use bevy::{color::palettes::tailwind, prelude::*};
+use bevy::{color::palettes::tailwind, math::VectorSpace, prelude::*};
 use bevy_rapier2d::prelude::*;
 
 #[derive(Component)]
@@ -23,6 +23,7 @@ struct PlayerVehicleBundle {
     mass: AdditionalMassProperties,
     continuous_collision_detection: Ccd,
     restitution: Restitution,
+    friction: Friction,
     damping: Damping,
     locked_axes: LockedAxes,
 }
@@ -45,6 +46,10 @@ impl PlayerVehicleBundle {
             continuous_collision_detection: Ccd::enabled(),
             restitution: Restitution {
                 coefficient: 0.4,
+                combine_rule: CoefficientCombineRule::Average,
+            },
+            friction: Friction {
+                coefficient: 0.1,
                 combine_rule: CoefficientCombineRule::Average,
             },
             damping: Damping {
@@ -72,6 +77,7 @@ struct ChaserVehicleBundle {
     mass: AdditionalMassProperties,
     continuous_collision_detection: Ccd,
     restitution: Restitution,
+    friction: Friction,
     locked_axes: LockedAxes,
 }
 
@@ -93,6 +99,10 @@ impl ChaserVehicleBundle {
             continuous_collision_detection: Ccd::enabled(),
             restitution: Restitution {
                 coefficient: 0.7,
+                combine_rule: CoefficientCombineRule::Average,
+            },
+            friction: Friction {
+                coefficient: 0.1,
                 combine_rule: CoefficientCombineRule::Average,
             },
             locked_axes: LockedAxes::ROTATION_LOCKED,
@@ -225,11 +235,9 @@ fn update_chasers(
             .distance(player_trans.translation)
             .abs();
 
-        if distance_scalar > 150.0 {
-            acceleration.force = Vec2::new(
+        let chase_force = Vec2::new(
                 800000.0
                     * distance_vector.x.signum()
-                    * (distance_vector.x.abs() / 400.0)
                     * (if velocity.linvel.x.signum() != distance_vector.x.signum() {
                         3.0
                     } else {
@@ -237,19 +245,20 @@ fn update_chasers(
                     }),
                 800000.0
                     * distance_vector.y.signum()
-                    * (distance_vector.y.abs() / 400.0)
                     * (if velocity.linvel.y.signum() != distance_vector.y.signum() {
                         3.0
                     } else {
                         1.0
                     }),
             );
-        } else if distance_scalar < 150.0 {
-            acceleration.force = Vec2::new(
-                -1000000.0 * distance_vector.x.signum(),
-                -1000000.0 * distance_vector.y.signum(),
-            )
-        }
+
+        let surround_force = Vec2::new(
+            900000.0 * distance_vector.x.signum(),
+            900000.0 * distance_vector.y.signum(),
+        ).rotate(Vec2::new(-1.5708*1.5, 1.5708));
+
+        acceleration.force = Vec2::lerp(surround_force, chase_force, (distance_scalar.min(400.0) / 400.0).tanh())
+    }
 }
 
 fn enforce_velocity_maximum(mut query: Query<(&mut Velocity, &MaximumVelocity)>) {

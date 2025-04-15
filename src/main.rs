@@ -1,4 +1,4 @@
-use bevy::{color::palettes::tailwind, prelude::*};
+use bevy::{color::palettes::tailwind, math::vec2, prelude::*};
 use bevy_rapier2d::prelude::*;
 
 #[derive(Component)]
@@ -42,7 +42,7 @@ impl PlayerVehicleBundle {
             },
             acceleration: default(),
             gravity: GravityScale(0.0),
-            mass: AdditionalMassProperties::Mass(100.0),
+            mass: AdditionalMassProperties::Mass(1000.0),
             continuous_collision_detection: Ccd::enabled(),
             restitution: Restitution {
                 coefficient: 0.4,
@@ -121,15 +121,23 @@ fn setup(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands.spawn((
-        PlayerVehicleBundle::new(),
         Camera2d,
         Projection::from(OrthographicProjection {
             scale: 2.0,
             ..OrthographicProjection::default_2d()
         }),
-        Mesh2d(meshes.add(Circle::new(25.0))),
+        Transform::default(),
+    ));
+
+    commands.spawn((
+        PlayerVehicleBundle::new(),
+        Mesh2d(meshes.add(Triangle2d::new(
+            vec2(0.0, 30.0),
+            vec2(-20.0, 0.0),
+            vec2(20.0, 0.0),
+        ))),
         MeshMaterial2d(materials.add(Color::from(tailwind::TEAL_500))),
-        Collider::ball(25.0),
+        Collider::triangle(vec2(0.0, 30.0), vec2(-20.0, 0.0), vec2(20.0, 0.0)),
     ));
 
     commands.spawn((
@@ -200,7 +208,7 @@ fn player_input(
     let (player_vehicle_vel, mut acceleration, mut damping) = player_vehicle_dynamics.into_inner();
 
     acceleration.force = Vec2::ZERO;
-    damping.linear_damping = 1.0;
+    damping.linear_damping = 0.1;
 
     if kb.any_pressed([KeyCode::ArrowUp, KeyCode::KeyW]) {
         let sensitivity_modifier = match player_vehicle_vel.linvel.y {
@@ -300,6 +308,32 @@ fn enforce_velocity_maximum(mut query: Query<(&mut Velocity, &MaximumVelocity)>)
     }
 }
 
+fn update_view_based_on_physics(
+    player: Single<(&Velocity, &mut Transform), With<PlayerMarker>>,
+    camera: Single<(&mut Transform,), (With<Camera2d>, Without<PlayerMarker>)>,
+    time: Res<Time>,
+) {
+    let (player_vel, mut player_transf) = player.into_inner();
+
+    // Rotate player ship to face direction it's moving
+    player_transf.rotation = Quat::from_rotation_z(FloatExt::lerp(
+        player_transf.rotation.z,
+        player_vel.linvel.to_angle() - (90.0 * std::f32::consts::PI / 180.0),
+        5.0 * time.delta_secs(),
+    ));
+
+    // Have camera track player ship
+    let (mut camera_transf,) = camera.into_inner();
+
+    camera_transf.translation = camera_transf.translation.lerp(
+        (player_transf.translation
+            + Vec3::new(player_vel.linvel.x, player_vel.linvel.y, 0.0) / 1.5)
+            .with_z(camera_transf.translation.z)
+            .round(),
+        2.0 * time.delta_secs(),
+    );
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -311,8 +345,11 @@ fn main() {
         }))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_systems(Startup, (setup,))
-        .add_systems(FixedUpdate, (player_input, enforce_velocity_maximum))
-        .add_systems(Update, update_chasers)
+        .add_systems(FixedUpdate, (enforce_velocity_maximum,))
+        .add_systems(
+            Update,
+            (player_input, update_chasers, update_view_based_on_physics),
+        )
         .insert_resource(Time::<Fixed>::from_hz(64.0))
         .run();
 }

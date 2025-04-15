@@ -1,4 +1,4 @@
-use bevy::{color::palettes::tailwind, math::VectorSpace, prelude::*};
+use bevy::{color::palettes::tailwind, prelude::*};
 use bevy_rapier2d::prelude::*;
 
 #[derive(Component)]
@@ -153,6 +153,20 @@ fn setup(
         MeshMaterial2d(materials.add(Color::from(tailwind::RED_700))),
         Collider::ball(25.0),
     ));
+    commands.spawn((
+        ChaserVehicleBundle::new()
+            .with_transform(Transform::from_translation(Vec3::new(200.0, 200.0, 0.0))),
+        Mesh2d(meshes.add(Circle::new(25.0))),
+        MeshMaterial2d(materials.add(Color::from(tailwind::RED_800))),
+        Collider::ball(25.0),
+    ));
+    commands.spawn((
+        ChaserVehicleBundle::new()
+            .with_transform(Transform::from_translation(Vec3::new(200.0, 200.0, 0.0))),
+        Mesh2d(meshes.add(Circle::new(25.0))),
+        MeshMaterial2d(materials.add(Color::from(tailwind::RED_900))),
+        Collider::ball(25.0),
+    ));
 
     for idx in 0..100 {
         commands.spawn((
@@ -263,14 +277,14 @@ fn update_chasers(
             900000.0 * distance_vector.y.signum(),
         )
         .rotate(Vec2::new(
-            std::f32::consts::FRAC_PI_2 * -1.5,
+            std::f32::consts::FRAC_PI_2 * -1.25,
             std::f32::consts::FRAC_PI_2,
         ));
 
         acceleration.force = Vec2::lerp(
             surround_force,
             chase_force,
-            distance_scalar.min(400.0) / 400.0,
+            distance_scalar.min(500.0) / 500.0,
         )
     }
 }

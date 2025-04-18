@@ -1,5 +1,10 @@
 use bevy::{color::palettes::tailwind, math::vec2, prelude::*};
-use bevy_rapier2d::{na::ComplexField, prelude::*};
+use bevy_rapier2d::prelude::*;
+
+#[inline]
+fn deg_to_rad(deg: f32) -> f32 {
+    deg * std::f32::consts::PI / 180.0
+}
 
 #[derive(Component)]
 struct PlayerMarker;
@@ -62,11 +67,14 @@ impl PlayerVehicleBundle {
 }
 
 #[derive(Component)]
-struct ChaserMarker;
+struct Chaser {
+    attack_angle: f32,
+    acceleration_factor: f32,
+}
 
 #[derive(Bundle)]
 struct ChaserVehicleBundle {
-    marker: ChaserMarker,
+    chaser: Chaser,
 
     transform: Transform,
     rigid_body: RigidBody,
@@ -82,9 +90,9 @@ struct ChaserVehicleBundle {
 }
 
 impl ChaserVehicleBundle {
-    fn new() -> Self {
+    fn new(chaser: Chaser) -> Self {
         Self {
-            marker: ChaserMarker,
+            chaser,
 
             transform: default(),
             rigid_body: RigidBody::Dynamic,
@@ -95,7 +103,7 @@ impl ChaserVehicleBundle {
             },
             acceleration: default(),
             gravity: GravityScale(0.0),
-            mass: AdditionalMassProperties::Mass(100.0),
+            mass: AdditionalMassProperties::Mass(1500.0),
             continuous_collision_detection: Ccd::enabled(),
             restitution: Restitution {
                 coefficient: 0.7,
@@ -105,7 +113,7 @@ impl ChaserVehicleBundle {
                 coefficient: 0.01,
                 combine_rule: CoefficientCombineRule::Average,
             },
-            locked_axes: LockedAxes::ROTATION_LOCKED,
+            locked_axes: LockedAxes::empty(),
         }
     }
 
@@ -132,48 +140,47 @@ fn setup(
     commands.spawn((
         PlayerVehicleBundle::new(),
         Mesh2d(meshes.add(Triangle2d::new(
-            vec2(0.0, 35.0),
+            vec2(0.0, 40.0),
             vec2(-20.0, 0.0),
             vec2(20.0, 0.0),
         ))),
         MeshMaterial2d(materials.add(Color::from(tailwind::TEAL_500))),
-        Collider::triangle(vec2(0.0, 35.0), vec2(-20.0, 0.0), vec2(20.0, 0.0)),
+        Collider::triangle(vec2(0.0, 40.0), vec2(-20.0, 0.0), vec2(20.0, 0.0)),
     ));
 
+    for (idx, tw_color) in [
+        tailwind::RED_300,
+        tailwind::RED_400,
+        tailwind::RED_500,
+        tailwind::RED_600,
+        tailwind::RED_700,
+        tailwind::RED_800,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        commands.spawn((
+            ChaserVehicleBundle::new(Chaser { attack_angle: 0.0, acceleration_factor: 1.0 }).with_transform(Transform::from_translation(Vec3::new(
+                100.0 * ((idx as f32 % 3.0) - 2.0),
+                100.0 * (idx + 1) as f32,
+                0.0,
+            ))),
+            Mesh2d(meshes.add(Triangle2d::new(
+                vec2(0.0, 40.0),
+                vec2(-20.0, 0.0),
+                vec2(20.0, 0.0),
+            ))),
+            MeshMaterial2d(materials.add(Color::from(tw_color))),
+            Collider::triangle(vec2(0.0, 40.0), vec2(-20.0, 0.0), vec2(20.0, 0.0)),
+        ));
+    }
+
     commands.spawn((
-        ChaserVehicleBundle::new()
-            .with_transform(Transform::from_translation(Vec3::new(-10.0, 40.0, 0.0))),
-        Mesh2d(meshes.add(Circle::new(25.0))),
-        MeshMaterial2d(materials.add(Color::from(tailwind::RED_500))),
-        Collider::ball(25.0),
-    ));
-    commands.spawn((
-        ChaserVehicleBundle::new()
-            .with_transform(Transform::from_translation(Vec3::new(-100.0, 70.0, 0.0))),
-        Mesh2d(meshes.add(Circle::new(25.0))),
-        MeshMaterial2d(materials.add(Color::from(tailwind::RED_600))),
-        Collider::ball(25.0),
-    ));
-    commands.spawn((
-        ChaserVehicleBundle::new()
-            .with_transform(Transform::from_translation(Vec3::new(100.0, 20.0, 0.0))),
-        Mesh2d(meshes.add(Circle::new(25.0))),
-        MeshMaterial2d(materials.add(Color::from(tailwind::RED_700))),
-        Collider::ball(25.0),
-    ));
-    commands.spawn((
-        ChaserVehicleBundle::new()
-            .with_transform(Transform::from_translation(Vec3::new(200.0, 200.0, 0.0))),
-        Mesh2d(meshes.add(Circle::new(25.0))),
-        MeshMaterial2d(materials.add(Color::from(tailwind::RED_800))),
-        Collider::ball(25.0),
-    ));
-    commands.spawn((
-        ChaserVehicleBundle::new()
-            .with_transform(Transform::from_translation(Vec3::new(200.0, 200.0, 0.0))),
-        Mesh2d(meshes.add(Circle::new(25.0))),
-        MeshMaterial2d(materials.add(Color::from(tailwind::RED_900))),
-        Collider::ball(25.0),
+        ChaserVehicleBundle::new(Chaser { attack_angle: deg_to_rad(90.0), acceleration_factor: 2.0 })
+            .with_transform(Transform::from_translation(Vec3::new(800.0, 800.0, 0.0))),
+        Mesh2d(meshes.add(Capsule2d::new(50.0, 200.0))),
+        MeshMaterial2d(materials.add(Color::from(tailwind::AMBER_500))),
+        Collider::capsule_y(100.0, 50.0),
     ));
 
     for idx in 0..100 {
@@ -187,6 +194,7 @@ fn setup(
     }
 
     commands.spawn((
+        Transform::from_translation(Vec3::new(-1000.0, 0.0, 0.0)),
         Mesh2d(meshes.add(Rectangle::new(200.0, 200.0))),
         MeshMaterial2d(materials.add(Color::from(tailwind::PURPLE_800))),
         Collider::cuboid(100.0, 100.0),
@@ -248,12 +256,16 @@ fn player_input(
 }
 
 fn update_chasers(
-    mut chasers: Query<(&Velocity, &Transform, &mut ExternalForce), With<ChaserMarker>>,
+    mut chasers: Query<
+        (&Velocity, &mut Transform, &mut ExternalForce, &Chaser),
+        Without<PlayerMarker>,
+    >,
     player_trans: Single<&Transform, With<PlayerMarker>>,
+    time: Res<Time>,
 ) {
     let chasers = chasers.iter_mut().collect::<Vec<_>>();
 
-    for (velocity, transform, mut acceleration) in chasers {
+    for (velocity, mut transform, mut acceleration, chaser) in chasers {
         let distance_vector = player_trans.translation - transform.translation;
 
         let distance_scalar = transform
@@ -265,6 +277,7 @@ fn update_chasers(
         let chase_force = Vec2::new(
             800000.0
                 * distance_vector.x.signum()
+                * chaser.acceleration_factor
                 * (if velocity.linvel.x.signum() != distance_vector.x.signum() {
                     3.0
                 } else {
@@ -272,6 +285,7 @@ fn update_chasers(
                 }),
             800000.0
                 * distance_vector.y.signum()
+                * chaser.acceleration_factor
                 * (if velocity.linvel.y.signum() != distance_vector.y.signum() {
                     3.0
                 } else {
@@ -281,8 +295,8 @@ fn update_chasers(
 
         // Make chasers circle the player
         let surround_force = Vec2::new(
-            900000.0 * distance_vector.x.signum(),
-            900000.0 * distance_vector.y.signum(),
+            900000.0 * distance_vector.x.signum() * chaser.acceleration_factor,
+            900000.0 * distance_vector.y.signum() * chaser.acceleration_factor,
         )
         .rotate(Vec2::new(
             std::f32::consts::FRAC_PI_2 * -1.25,
@@ -293,7 +307,19 @@ fn update_chasers(
             surround_force,
             chase_force,
             distance_scalar.min(500.0) / 500.0,
-        )
+        );
+
+        let player_angle = (vec2(player_trans.translation.x, player_trans.translation.y)
+            - vec2(transform.translation.x, transform.translation.y))
+        .to_angle();
+        let angle_modifier = if distance_scalar < 700.0 {
+            chaser.attack_angle
+        } else {
+            0.0_f32
+        };
+        transform.rotation = transform.rotation.lerp(Quat::from_rotation_z(
+            player_angle - deg_to_rad(90.0) + angle_modifier,
+        ), time.delta_secs());
     }
 }
 
@@ -324,7 +350,7 @@ fn update_view_based_on_physics(
     })
     .to_angle();
     player_transf.rotation = player_transf.rotation.lerp(
-        Quat::from_rotation_z(rotation_angle - (90.0 * std::f32::consts::PI / 180.0)),
+        Quat::from_rotation_z(rotation_angle - deg_to_rad(90.0)),
         7.5 * time.delta_secs(),
     );
 
